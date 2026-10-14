@@ -12,8 +12,12 @@ jobs:
       - run: shellcheck harden.sh
 
   harden-real-server:
-    name: Harden a real Ubuntu 24.04 machine and verify it
-    runs-on: ubuntu-24.04
+    name: Harden a real ${{ matrix.os }} machine and verify it
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +41,7 @@ jobs:
           for line in "permitrootlogin no" "passwordauthentication no" "kbdinteractiveauthentication no" "pubkeyauthentication yes" "maxauthtries 3"; do
             grep -qx "$line" <<<"$cfg" || { echo "missing: $line"; exit 1; }
           done
-          test "$(grep -c . /home/deploy/.ssh/authorized_keys)" = "1"
+          test "$(sudo grep -c . /home/deploy/.ssh/authorized_keys)" = "1"
 
       - name: Key login works
         run: ssh -i "$HOME/ci_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new deploy@localhost 'sudo -n true && echo "logged in as $(whoami) with sudo"'

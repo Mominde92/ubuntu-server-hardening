@@ -6,7 +6,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 One script that applies the security baseline I run on every new Ubuntu web server before an application goes live.
-It is **tested on a real Ubuntu 24.04 machine on every push**: CI hardens a GitHub runner, runs the script a second time,
+It is **tested on real Ubuntu 22.04 and 24.04 machines on every push**: CI hardens a GitHub runner, runs the script a second time,
 then proves that key login works, password login is refused and the firewall and fail2ban are active.
 
 ## What it does
