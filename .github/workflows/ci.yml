@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck harden.sh
+
+  harden-real-server:
+    name: Harden a real Ubuntu 24.04 machine and verify it
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create a test SSH key
+        run: ssh-keygen -q -t ed25519 -N "" -f "$HOME/ci_key"
+
+      - name: Dry run changes nothing
+        run: |
+          ./harden.sh --user deploy --pubkey-file "$HOME/ci_key.pub" --dry-run
+          ! id deploy
+
+      - name: Harden this runner
+        run: sudo ./harden.sh --user deploy --pubkey-file "$HOME/ci_key.pub"
+
+      - name: Second run is safe (idempotent)
+        run: sudo ./harden.sh --user deploy --pubkey-file "$HOME/ci_key.pub"
+
+      - name: SSH configuration is effective
+        run: |
+          cfg=$(sudo sshd -T)
+          for line in "permitrootlogin no" "passwordauthentication no" "kbdinteractiveauthentication no" "pubkeyauthentication yes" "maxauthtries 3"; do
+            grep -qx "$line" <<<"$cfg" || { echo "missing: $line"; exit 1; }
+          done
+          test "$(grep -c . /home/deploy/.ssh/authorized_keys)" = "1"
+
+      - name: Key login works
+        run: ssh -i "$HOME/ci_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new deploy@localhost 'sudo -n true && echo "logged in as $(whoami) with sudo"'
+
+      - name: Server offers public key authentication only
+        run: |
+          out=$(ssh -o BatchMode=yes -o PubkeyAuthentication=no -o StrictHostKeyChecking=accept-new deploy@localhost true 2>&1 || true)
+          echo "$out"
+          grep -q "Permission denied (publickey)" <<<"$out"
+
+      - name: Firewall, updates and fail2ban are on
+        run: |
+          sudo ufw status verbose | tee /dev/stderr | grep -q "Status: active"
+          sudo ufw status | grep -q "22/tcp"
+          grep -q 'Unattended-Upgrade "1"' /etc/apt/apt.conf.d/20auto-upgrades
+          systemctl is-active fail2ban
+          sudo fail2ban-client status sshd
